@@ -16,6 +16,7 @@ object ClusterPersistence {
     const val DEFAULT_CLUSTER_ETA_CARD_Y_PX = 540
 
     const val DEFAULT_CLUSTER_SONG_CARD_X_PX = 1300
+    const val DEFAULT_CLUSTER_SONG_CARD_PX = DEFAULT_CLUSTER_SONG_CARD_X_PX
     const val DEFAULT_CLUSTER_SONG_CARD_Y_PX = 40
 
     const val CLUSTER_CARD_SCALE_MIN = 60

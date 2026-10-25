@@ -73,7 +73,7 @@ internal class ClusterSongView(context: Context) : View(context) {
         if (next.title.isEmpty() && next.artist.isEmpty()) return
 
         if (posX.isNaN()) {
-            posX = ClusterPersistence.loadCardX(context, "song", ClusterPersistence.DEFAULT_CLUSTER_SONG_CARD_PX).toFloat()
+            posX = ClusterPersistence.loadCardX(context, "song", ClusterPersistence.DEFAULT_CLUSTER_SONG_CARD_X_PX).toFloat()
             posY = ClusterPersistence.loadCardY(context, "song", ClusterPersistence.DEFAULT_CLUSTER_SONG_CARD_Y_PX).toFloat()
         }
         if (overlayScale.isNaN()) {
@@ -133,6 +133,7 @@ internal class ClusterSongView(context: Context) : View(context) {
     }
 
     companion object {
-        const val DEFAULT_CLUSTER_SONG_CARD_PX = 1300
+        const val DEFAULT_CLUSTER_SONG_CARD_X_PX = 1300
+        const val DEFAULT_CLUSTER_SONG_CARD_PX = DEFAULT_CLUSTER_SONG_CARD_X_PX
     }
 }
