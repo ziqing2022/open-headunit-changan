@@ -224,7 +224,7 @@ class ClusterPresentation(
     }
 
     fun updateTurnGuidance(guidance: ClusterTurnGuidance?) {
-        val hasRoute = guidance != null && (guidance.maneuverType != null || guidance.distanceMeters != null)
+        val hasRoute = guidance != null && (guidance.distanceMeters > 0 || guidance.remainingMeters != null || guidance.road.isNotEmpty())
         turnCardView?.setGuidance(if (hasRoute) guidance else null)
         etaCardView?.setGuidance(if (hasRoute) guidance else null)
         if (!mirrorMode) {

@@ -27,8 +27,6 @@ import com.andrerinas.openheadunit.cluster.ClusterSong
 import com.andrerinas.openheadunit.cluster.ClusterPersistence
 import com.andrerinas.openheadunit.cluster.InCallClusterBridge
 import android.hardware.display.DisplayManager
-import com.andrerinas.openheadunit.view.TextureProjectionView
-import com.andrerinas.openheadunit.view.GlProjectionView
 import com.andrerinas.openheadunit.contract.NavigationUpdateIntent
 import androidx.activity.OnBackPressedCallback
 import androidx.core.content.ContextCompat
