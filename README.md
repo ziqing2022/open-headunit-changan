@@ -26,6 +26,62 @@ Choose from the five options below according to your Android Auto version and se
 <img width="1280" height="800" alt="image" src="https://github.com/user-attachments/assets/ce67584e-fcf6-4308-b11a-116780df47f7" />
 <img width="1280" height="800" alt="image" src="https://github.com/user-attachments/assets/fc2870be-a173-4113-8187-4835bd564842" />
 
+## 🇨🇳 长安车机专属深度适配与增强功能说明
+
+本项目在官方 Open Headunit 架构基础上，针对**长安系列车型车机（如 UNI-V 等搭载飞鱼 OS 的多屏 Android 车机）**及双屏/仪表副屏硬件进行了专属深度定制与核心功能增强。主要优化与新增特性如下：
+
+---
+
+### 1. 仪表盘投屏：整屏镜像与导航 HUD 卡片双模式
+* **副屏智能枚举与通用兜底**：基于 Android 原生 `Presentation` 多屏框架，自动遍历并探测车机所有可用屏幕。无论副屏在车机系统内的 Display ID 如何变更，均能实现通用兜底识别与无缝接入（如长安 1920×720 分辨率液晶仪表副屏）。
+* **整机镜像模式（Mirror Mode）**：将 Android Auto 完整画面无延迟投射至仪表盘中；支持投屏区域局部裁剪矩形（Rect）与 Matrix 矩阵等比填充映射，完美适应各种内嵌异形仪表。
+* **仅导航 HUD 卡片模式（Nav Cards Mode）**：将路线导航与媒体信息以精致半透明悬浮卡片形态呈现在仪表盘上，关键车速仪表与原车警示信息一目了然，互不遮挡。
+* **原车画面自然透出机制**：切换回原车画面时，自动将 Presentation Map Surface 设为不可见（`GONE`），使长安原车底层仪表 UI 自然透出，完全无需依赖原车高德地图在后台常驻。
+
+---
+
+### 2. 三指手势飞屏控制：三态平滑循环流转
+* **三指左右滑飞屏控制**：
+  * **三指左滑（前进）**：`原车机画面` $\to$ `整机镜像` $\to$ `仅导航 HUD`
+  * **三指右滑（后退）**：`仅导航 HUD` $\to$ `整机镜像` $\to$ `原车机画面`
+  * 切换状态即时生效并持久化存储至本地，断电熄火重连自动恢复上次模式。
+* **三指滑动矢量判定优化**：
+  * 采用 2:1 水平主导矢量倾角判定算法，支持手势带有轻微下倾滑动（水平位移绝对值大于垂直位移 2 倍即可命中），摆脱了严苛的水平线限制，驾驶实车盲操识别率极高。
+
+---
+
+### 3. 高质感 HUD 悬浮卡片与轻量化视觉升级
+* **转向引导卡（Turn Card）**：
+  * 内置 12 种主流导航转向矢量指示图标（左转、右转、直行、掉头、靠左、环岛等）；
+  * 直接解析 Android Auto 官方导航通道广播，精准显示当前路名与转向剩余距离（自动米/公里换算）。
+* **到达信息卡（ETA Card）**：
+  * 实时展示预计到达时间（ETA，如“18:30 到达”）、剩余行驶时长（分钟/小时）与剩余公里数。
+* **歌曲信息卡（Music Card）**：
+  * 实时从 Android Auto 媒体协议通道拉取当前播放的「歌名 — 歌手」以及专辑封面；整机镜像与仅导航模式下均可常驻显示。
+* **轻量化毛玻璃阴影升级**：
+  * 采用磨砂半透明胶囊风格（Frosted Capsule）与高光微倒角（Bevel Sheen）；
+  * 阴影算法升级为 2px 固定微偏移 + 10% 淡填充轻阴影，彻底解决了原有深色阴影在高卡片下方形成大块实心暗斑的问题，观感通透高级。
+* **独立卡片位置与自由缩放调节**：
+  * 以 1920×720 画布为基准进行坐标映射；
+  * 五张卡片均支持在设置中独立调节 X/Y 轴位置坐标，以及 60% ~ 160% 自由缩放比例，即调即生效。
+
+---
+
+### 4. 长安车机专属音频流修复（彻底解决点击「播放消息」无声无字）
+* **深度排查与机理定位**：
+  * **为什么没有文字**：遵循 Android Auto 驾驶安全法规，行车中即时通讯消息（短信、微信等）严禁在屏幕上弹出大段纯文本，必须由 Google Assistant 语音朗读。
+  * **为什么点击后无声**：原项目默认语音引导流为 `STREAM_VOICE_CALL`（通话流 0）。长安车机底层音频 DSP 策略对通话通道设置了硬件级静音保护——仅在蓝牙电话（HFP）接通状态下才拉高通电使能，导致收到语音包时车机扬声器硬件完全静音。
+* **优化修复**：
+  * 将默认引导音频流切换为 `AudioManager.STREAM_MUSIC`（媒体音频流）；
+  * 长安车机媒体流全时放通，并支持音量平滑压音混音（Audio Ducking）。点击「播放消息」即可通过原车音响清晰收听 Assistant 读信语音。
+
+---
+
+### 5. 云端 CI/CD 自动化构建集成（零环境依赖）
+* 项目配置了针对 Android 36 + NDK 29 + CMake 3.22.1 的专用 GitHub Actions 自动化工作流（`.github/workflows/build-debug-apk.yml`）。
+* 本地无需配置复杂的 Android Studio 及 C++ 编译环境，推送到 GitHub 后云端 Ubuntu 容器可在 3~5 分钟内自动编译生成完整包含 C++ 原生库的 Debug APK。
+
+---
 
 ## How to use
 **Check out the [Wiki](https://github.com/andreknieriem/open-headunit/wiki) for detailed documentation, setup guides and troubleshooting!**
@@ -162,7 +218,13 @@ adb shell am start -a android.intent.action.VIEW -d "headunit://connect?ip=192.1
 - Info/Help descriptions to the settings for better understanding
 
 ## Changelog
-### 4.0.0-alpha
+### 4.0.0-alpha (长安适配增强版)
+- **【长安专属】仪表盘投屏**：新增通用 Presentation 仪表副屏投屏入口，支持整屏镜像与导航流卡片两种模式，带 Display 枚举通用兜底（1920×720 等长安车机副屏即插即用）
+- **【长安专属】三指飞屏手势**：三指左滑/右滑在 原车画面 ↔ 整机镜像 ↔ 仅导航 HUD 三态之间平滑流转，持久化记忆；优化 2:1 水平主导滑动倾角判定
+- **【长安专属】HUD 悬浮卡片**：毛玻璃胶囊转向卡（12种矢量箭头）、到达信息卡（ETA/剩余时间/里程）、歌曲信息卡（歌名/歌手/专辑图）
+- **【长安专属】卡片视觉优化**：卡片阴影重构为 2px 固定微偏移 + 10% 淡填充轻阴影，观感轻盈无暗斑；支持 1920×720 画布下独立坐标与 60%~160% 自由缩放
+- **【长安专属】音频流修复**：将默认语音引导流切换为 STREAM_MUSIC，彻底解决长安车机点击“播放消息”硬件静音、无语音无声的问题
+- **【工程化】云端自动化打包**：集成针对 Android 36 + NDK 29 的 GitHub Actions 自动化 CI 构建流，支持一键编译生成 Debug APK
 - New Homescreen, thanks to @andrecuellar
 - AAP: send one version request over TCP, so a slow head unit server is not left deaf
 - AAP: Keep media and navigation display updates off the receive path
