@@ -25,6 +25,10 @@ import com.andrerinas.openheadunit.cluster.ClusterPresentation
 import com.andrerinas.openheadunit.cluster.ClusterTurnGuidance
 import com.andrerinas.openheadunit.cluster.ClusterSong
 import com.andrerinas.openheadunit.cluster.ClusterPersistence
+import com.andrerinas.openheadunit.cluster.InCallClusterBridge
+import android.hardware.display.DisplayManager
+import com.andrerinas.openheadunit.view.TextureProjectionView
+import com.andrerinas.openheadunit.view.GlProjectionView
 import com.andrerinas.openheadunit.contract.NavigationUpdateIntent
 import androidx.activity.OnBackPressedCallback
 import androidx.core.content.ContextCompat
@@ -104,6 +108,66 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
     private var clusterPresentation: ClusterPresentation? = null
     private var clusterSwipePosition = 0 // -1 = native car screen, 0 = mirror, 1 = nav cards
     private var isClusterNavReceiverRegistered = false
+    private var isClusterDisplayListenerRegistered = false
+
+    private val clusterDisplayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) {
+            AppLog.i("Cluster: Display added: $displayId")
+            runOnUiThread { ensureClusterPresentation() }
+        }
+        override fun onDisplayRemoved(displayId: Int) {
+            AppLog.i("Cluster: Display removed: $displayId")
+            if (clusterPresentation?.display?.displayId == displayId) {
+                clusterPresentation?.dismiss()
+                clusterPresentation = null
+                updateMirrorCaptureState()
+            }
+        }
+        override fun onDisplayChanged(displayId: Int) {
+            AppLog.i("Cluster: Display changed: $displayId")
+            runOnUiThread { ensureClusterPresentation() }
+        }
+    }
+
+    private var mirrorCaptureActive = false
+    private val mirrorCaptureRunnable = object : Runnable {
+        override fun run() {
+            if (!mirrorCaptureActive || clusterSwipePosition != 0 || clusterPresentation == null) {
+                return
+            }
+            try {
+                val view = projectionView
+                if (view is TextureProjectionView && view.isAvailable) {
+                    val bm = view.getBitmap(960, 540)
+                    if (bm != null) {
+                        clusterPresentation?.updateMirrorFrame(bm)
+                    }
+                } else if (view is GlProjectionView) {
+                    val bm = view.captureBitmap()
+                    if (bm != null) {
+                        clusterPresentation?.updateMirrorFrame(bm)
+                    }
+                }
+            } catch (e: Exception) {
+                AppLog.w("Cluster: mirror frame capture failed: ${e.message}")
+            }
+            if (mirrorCaptureActive && clusterSwipePosition == 0) {
+                watchdogHandler.postDelayed(this, 66L)
+            }
+        }
+    }
+
+    private fun updateMirrorCaptureState() {
+        if (clusterSwipePosition == 0 && clusterPresentation != null) {
+            if (!mirrorCaptureActive) {
+                mirrorCaptureActive = true
+                watchdogHandler.post(mirrorCaptureRunnable)
+            }
+        } else {
+            mirrorCaptureActive = false
+            watchdogHandler.removeCallbacks(mirrorCaptureRunnable)
+        }
+    }
 
     private var clusterGestureActive = false
     private var clusterGestureStartX = 0f
@@ -1138,7 +1202,29 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         }
 
         // Initialize Instrument Cluster Presentation & Navigation/Media listeners
+        val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        dm?.registerDisplayListener(clusterDisplayListener, watchdogHandler)
+        isClusterDisplayListenerRegistered = true
+
         clusterSwipePosition = if (ClusterPersistence.loadClusterMirrorMode(this)) 0 else 1
+
+        if (InCallClusterBridge.isAvailable(this)) {
+            AppLog.i("InCallClusterBridge: Changan cluster projection service detected")
+            InCallClusterBridge.observeCallback(this)
+            InCallClusterBridge.projectingListener = { projecting ->
+                AppLog.i("InCallClusterBridge: projectingListener reported: $projecting")
+                runOnUiThread {
+                    if (projecting) {
+                        ensureClusterPresentation()
+                        applyClusterSwipeState()
+                    }
+                }
+            }
+            if (clusterSwipePosition >= 0) {
+                InCallClusterBridge.openProjection(this)
+            }
+        }
+
         ensureClusterPresentation()
 
         val clusterFilter = IntentFilter(NavigationUpdateIntent.action)
@@ -2249,6 +2335,12 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         AppLog.i("Cluster: found display id=${display.displayId} name=${display.name}")
         val p = ClusterPresentation(this, display)
         clusterPresentation = p
+        p.setOnDismissListener {
+            if (clusterPresentation === p) {
+                clusterPresentation = null
+                updateMirrorCaptureState()
+            }
+        }
         p.show()
         applyClusterSwipeState()
     }
@@ -2268,12 +2360,16 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 p.setMode(false)
             }
         }
+        updateMirrorCaptureState()
     }
 
     private fun swipeClusterForward() {
         if (clusterSwipePosition < 1) {
             clusterSwipePosition++
             ClusterPersistence.saveClusterMirrorMode(this, clusterSwipePosition == 0)
+            if (clusterSwipePosition >= 0 && InCallClusterBridge.isAvailable(this)) {
+                InCallClusterBridge.openProjection(this)
+            }
             applyClusterSwipeState()
             val text = when (clusterSwipePosition) {
                 0 -> "仪表盘：整机镜像"
@@ -2289,6 +2385,15 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         if (clusterSwipePosition > -1) {
             clusterSwipePosition--
             ClusterPersistence.saveClusterMirrorMode(this, clusterSwipePosition == 0)
+            if (clusterSwipePosition == -1) {
+                if (InCallClusterBridge.isAvailable(this)) {
+                    InCallClusterBridge.releaseExternalScreen(this)
+                }
+            } else {
+                if (InCallClusterBridge.isAvailable(this)) {
+                    InCallClusterBridge.openProjection(this)
+                }
+            }
             applyClusterSwipeState()
             val text = when (clusterSwipePosition) {
                 0 -> "仪表盘：整机镜像"
@@ -2656,6 +2761,11 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
             unregisterReceiver(clusterNavigationReceiver)
             isClusterNavReceiverRegistered = false
         }
+        (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)?.unregisterDisplayListener(clusterDisplayListener)
+        mirrorCaptureActive = false
+        watchdogHandler.removeCallbacks(mirrorCaptureRunnable)
+        InCallClusterBridge.projectingListener = null
+        InCallClusterBridge.releaseExternalScreen(this)
         clusterPresentation?.dismiss()
         clusterPresentation = null
         if (isFinishReceiverRegistered) {

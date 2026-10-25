@@ -2,34 +2,40 @@ package com.andrerinas.openheadunit.cluster
 
 import android.app.Presentation
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.Point
-import android.graphics.Rect
-import android.graphics.SurfaceTexture
 import android.graphics.drawable.ColorDrawable
 import android.hardware.display.DisplayManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Display
-import android.view.Surface
-import android.view.TextureView
+import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import com.andrerinas.openheadunit.utils.AppLog
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Presentation window for the Instrument Cluster (Secondary Display) on Changan and other multi-screen vehicles.
  *
  * Supports:
  * 1. Mirror Mode: Whole-screen mirror with customizable Rect/Crop matrix.
- * 2. Nav Mode: Navigation cards (Turn, ETA, Song) on clean background.
+ * 2. Nav Mode: Navigation cards (Turn, ETA, Song) on automotive dark background with standby HUD.
  * 3. Native Car Screen: Smoothly hidden via setMapVisible(false) allowing native cluster UI to show.
  */
 class ClusterPresentation(
     context: Context,
     display: Display,
-    private val onMirrorSurfaceAvailable: ((Surface?) -> Unit)? = null,
 ) : Presentation(context, display) {
 
     private val projectionSize: Point = Point().also {
@@ -37,61 +43,99 @@ class ClusterPresentation(
         display.getRealSize(it)
     }
 
-    private var mirrorTextureView: TextureView? = null
+    private var mirrorView: ClusterMirrorView? = null
+    private var standbyLayout: LinearLayout? = null
+    private var clockTextView: TextView? = null
     private var turnCardView: ClusterTurnCardView? = null
     private var etaCardView: ClusterEtaCardView? = null
     private var songView: ClusterSongView? = null
     private var rootView: FrameLayout? = null
 
-    var mirrorSurface: Surface? = null
-        private set
-
     private var mirrorMode = true
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+
+    private val clockRunnable = object : Runnable {
+        override fun run() {
+            clockTextView?.text = clockFormat.format(Date())
+            mainHandler.postDelayed(this, 1000L)
+        }
+    }
+
+    inner class ClusterMirrorView(context: Context) : View(context) {
+        var frameBitmap: Bitmap? = null
+        val drawMatrix = Matrix()
+        private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val bm = frameBitmap ?: return
+            if (bm.isRecycled) return
+            canvas.drawBitmap(bm, drawMatrix, paint)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        window?.setBackgroundDrawable(ColorDrawable(Color.BLACK))
         window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
 
         val root = FrameLayout(context).apply {
-            setBackgroundColor(Color.TRANSPARENT)
+            setBackgroundColor(Color.rgb(15, 22, 30))
         }
         rootView = root
 
-        // Mirror TextureView
-        val textureView = TextureView(context)
-        mirrorTextureView = textureView
-        textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
-                AppLog.i("Cluster: mirror SurfaceTexture available ${width}x${height}")
-                surfaceTexture.setDefaultBufferSize(projectionSize.x, projectionSize.y)
-                refreshCrop()
-                val surf = Surface(surfaceTexture)
-                mirrorSurface = surf
-                onMirrorSurfaceAvailable?.invoke(surf)
-            }
+        // 1. Mirror View (for Whole-Screen Mirror)
+        val mv = ClusterMirrorView(context)
+        mirrorView = mv
+        root.addView(mv, FrameLayout.LayoutParams(-1, -1))
 
-            override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
-                refreshCrop()
-            }
-
-            override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
-
-            override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-                AppLog.i("Cluster: mirror SurfaceTexture destroyed")
-                onMirrorSurfaceAvailable?.invoke(null)
-                mirrorSurface?.release()
-                mirrorSurface = null
-                return true
-            }
+        // 2. Standby HUD Layout (Clock + Status when no navigation route active)
+        val standby = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.TRANSPARENT)
         }
-        root.addView(textureView, FrameLayout.LayoutParams(-1, -1))
+        standbyLayout = standby
 
-        // Cards
-        turnCardView = ClusterTurnCardView(context)
-        etaCardView = ClusterEtaCardView(context)
-        songView = ClusterSongView(context)
+        val titleTv = TextView(context).apply {
+            text = "Android Auto 仪表投屏"
+            textSize = 28f
+            setTextColor(Color.parseColor("#4A90E2"))
+            gravity = Gravity.CENTER
+        }
+        val clockTv = TextView(context).apply {
+            text = clockFormat.format(Date())
+            textSize = 58f
+            setTextColor(Color.WHITE)
+            paint.isFakeBoldText = true
+            gravity = Gravity.CENTER
+            setPadding(0, 12, 0, 8)
+        }
+        clockTextView = clockTv
+
+        val subTv = TextView(context).apply {
+            text = "等待手机导航启动…"
+            textSize = 18f
+            setTextColor(Color.parseColor("#88FFFFFF"))
+            gravity = Gravity.CENTER
+        }
+        standby.addView(titleTv)
+        standby.addView(clockTv)
+        standby.addView(subTv)
+
+        val standbyParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        )
+        root.addView(standby, standbyParams)
+
+        // 3. Navigation Cards
+        turnCardView = ClusterTurnCardView(context).apply { visibility = View.GONE }
+        etaCardView = ClusterEtaCardView(context).apply { visibility = View.GONE }
+        songView = ClusterSongView(context).apply { visibility = View.GONE }
 
         root.addView(turnCardView, FrameLayout.LayoutParams(-1, -1))
         root.addView(etaCardView, FrameLayout.LayoutParams(-1, -1))
@@ -101,37 +145,58 @@ class ClusterPresentation(
 
         mirrorMode = ClusterPersistence.loadClusterMirrorMode(context)
         setMode(mirrorMode)
+        mainHandler.post(clockRunnable)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        mainHandler.removeCallbacks(clockRunnable)
     }
 
     fun setMapVisible(visible: Boolean) {
         window?.attributes = window?.attributes?.apply {
             alpha = if (visible) 1f else 0f
         }
-        rootView?.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        rootView?.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     fun setMode(mirror: Boolean) {
         mirrorMode = mirror
         ClusterPersistence.saveClusterMirrorMode(context, mirror)
-        mirrorTextureView?.visibility = if (mirror) View.VISIBLE else View.GONE
+        mirrorView?.visibility = if (mirror) View.VISIBLE else View.GONE
         if (mirror) {
             refreshCrop()
+            standbyLayout?.visibility = View.GONE
+        } else {
+            val hasActiveTurn = turnCardView?.visibility == View.VISIBLE
+            standbyLayout?.visibility = if (hasActiveTurn) View.GONE else View.VISIBLE
         }
     }
 
+    fun updateMirrorFrame(bitmap: Bitmap?) {
+        if (!mirrorMode) return
+        val mv = mirrorView ?: return
+        mv.frameBitmap = bitmap
+        refreshCrop()
+        mv.invalidate()
+    }
+
     fun refreshCrop() {
-        val textureView = mirrorTextureView ?: return
+        val mv = mirrorView ?: return
         val baseW = if (projectionSize.x > 0) projectionSize.x else 1920
         val baseH = if (projectionSize.y > 0) projectionSize.y else 720
 
         if (!mirrorMode) {
-            textureView.setTransform(Matrix())
-            textureView.invalidate()
+            mv.drawMatrix.reset()
             return
         }
 
+        val bm = mv.frameBitmap
+        val bmW = bm?.width ?: baseW
+        val bmH = bm?.height ?: baseH
+
         val cropLeftPx = ClusterPersistence.loadClusterMirrorLeftCropPx(context)
-        val availW = (baseW - cropLeftPx).coerceAtLeast(1)
+        val availW = (bmW - cropLeftPx).coerceAtLeast(1)
 
         val xPct = ClusterPersistence.loadClusterCropLeftPercent(context)
         val yPct = ClusterPersistence.loadClusterCropTopPercent(context)
@@ -143,32 +208,28 @@ class ClusterPresentation(
         val x = xPct * baseW / 100
         val y = yPct * baseH / 100
 
-        val scale = minOf(w.toFloat() / availW, h.toFloat() / baseH)
+        val scale = minOf(w.toFloat() / availW, h.toFloat() / bmH)
         val drawnW = availW * scale
-        val drawnH = baseH * scale
+        val drawnH = bmH * scale
         val picLeft = x + (w - drawnW) / 2f
         val picTop = y + (h - drawnH) / 2f
         val offsetX = picLeft - cropLeftPx * scale
         val offsetY = picTop
 
-        val matrix = Matrix().apply {
+        mv.drawMatrix.apply {
+            reset()
             setScale(scale, scale)
             postTranslate(offsetX, offsetY)
         }
-        textureView.setTransform(matrix)
-
-        val clipLeft = if (picLeft > 0f) picLeft.toInt() else 0
-        val clipRight = if (textureView.width > 0) textureView.width else baseW
-        val clipBottom = if (textureView.height > 0) textureView.height else baseH
-        textureView.setClipBounds(Rect(clipLeft, 0, clipRight, clipBottom))
-
-        textureView.invalidate()
-        textureView.postInvalidateOnAnimation()
     }
 
     fun updateTurnGuidance(guidance: ClusterTurnGuidance?) {
-        turnCardView?.setGuidance(guidance)
-        etaCardView?.setGuidance(guidance)
+        val hasRoute = guidance != null && (guidance.maneuverType != null || guidance.distanceMeters != null)
+        turnCardView?.setGuidance(if (hasRoute) guidance else null)
+        etaCardView?.setGuidance(if (hasRoute) guidance else null)
+        if (!mirrorMode) {
+            standbyLayout?.visibility = if (hasRoute) View.GONE else View.VISIBLE
+        }
     }
 
     fun updateSong(song: ClusterSong?) {
