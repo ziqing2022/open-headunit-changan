@@ -220,24 +220,24 @@ object InCallClusterBridge {
         }
     }
 
-    fun openProjection(context: Context) {
+    fun openProjection(context: Context, forceFull: Boolean = false) {
         contextRef = context.applicationContext
         val ctx = contextRef ?: return
         mainHandler.removeCallbacksAndMessages(token)
         generation++
-        val alreadyProjecting = incallReportsProjecting() && !releasedByUs()
+        val alreadyProjecting = if (forceFull) false else (incallReportsProjecting() && !releasedByUs())
         openState = true
         broadcastHalfSent = false
         sourceEnterSent = false
         silentHoldScheduled = false
         silentOpenOnly = alreadyProjecting
         ensureBound(ctx)
-        if (alreadyProjecting) {
+        if (!forceFull && alreadyProjecting) {
             logSeq(generation, "open: incall already reports projecting; silent half only, no source switch")
             runSilentOpen()
             return
         }
-        if (!lastCallbackValue.containsKey(CALLBACK_CODE_STATE) && warmStart() && !releasedByUs()) {
+        if (!forceFull && !lastCallbackValue.containsKey(CALLBACK_CODE_STATE) && warmStart() && !releasedByUs()) {
             silentOpenOnly = true
             logSeq(
                 generation,

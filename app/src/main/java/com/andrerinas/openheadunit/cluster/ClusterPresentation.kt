@@ -80,6 +80,16 @@ class ClusterPresentation(
 
         window?.setBackgroundDrawable(ColorDrawable(Color.BLACK))
         window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window?.addFlags(
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        )
+        window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT
+        )
 
         val root = FrameLayout(context).apply {
             setBackgroundColor(Color.rgb(15, 22, 30))
@@ -154,10 +164,16 @@ class ClusterPresentation(
     }
 
     fun setMapVisible(visible: Boolean) {
-        window?.attributes = window?.attributes?.apply {
-            alpha = if (visible) 1f else 0f
+        val w = window ?: return
+        val alpha = if (visible) 1f else 0f
+        if (w.attributes.alpha != alpha) {
+            w.attributes = w.attributes.apply { this.alpha = alpha }
         }
-        rootView?.visibility = if (visible) View.VISIBLE else View.GONE
+        val target = if (visible) View.VISIBLE else View.GONE
+        if (w.decorView.visibility != target) {
+            w.decorView.visibility = target
+        }
+        rootView?.visibility = target
     }
 
     fun setMode(mirror: Boolean) {
@@ -166,7 +182,8 @@ class ClusterPresentation(
         mirrorView?.visibility = if (mirror) View.VISIBLE else View.GONE
         if (mirror) {
             refreshCrop()
-            standbyLayout?.visibility = View.GONE
+            val hasFrame = mirrorView?.frameBitmap != null
+            standbyLayout?.visibility = if (hasFrame) View.GONE else View.VISIBLE
         } else {
             val hasActiveTurn = turnCardView?.visibility == View.VISIBLE
             standbyLayout?.visibility = if (hasActiveTurn) View.GONE else View.VISIBLE
@@ -179,6 +196,9 @@ class ClusterPresentation(
         mv.frameBitmap = bitmap
         refreshCrop()
         mv.invalidate()
+        if (bitmap != null && standbyLayout?.visibility == View.VISIBLE) {
+            standbyLayout?.visibility = View.GONE
+        }
     }
 
     fun refreshCrop() {
@@ -244,12 +264,24 @@ class ClusterPresentation(
     }
 
     companion object {
+        fun describeDisplays(context: Context): String {
+            val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return "null"
+            return dm.displays.joinToString { "${it.displayId}:${it.name}" }
+        }
+
         fun findDisplay(context: Context): Display? {
             val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return null
-            dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
-                .firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }?.let { return it }
-            dm.displays
-                .firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }?.let { return it }
+            val all = dm.displays
+            AppLog.i("Cluster: available displays -> [${all.joinToString { "${it.displayId}:${it.name}" }}]")
+            val presDisplays = dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
+            presDisplays.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }?.let {
+                AppLog.i("Cluster: selected presentation display -> ${it.displayId}:${it.name}")
+                return it
+            }
+            all.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }?.let {
+                AppLog.i("Cluster: selected non-default display -> ${it.displayId}:${it.name}")
+                return it
+            }
             return null
         }
     }

@@ -14,6 +14,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.TextureView
 import android.view.View
+import android.view.PixelCopy
+import android.view.SurfaceView
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -128,6 +130,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
     }
 
     private var mirrorCaptureActive = false
+    private var isPixelCopyInProgress = false
     private val mirrorCaptureRunnable = object : Runnable {
         override fun run() {
             if (!mirrorCaptureActive || clusterSwipePosition != 0 || clusterPresentation == null) {
@@ -144,6 +147,24 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                     val bm = view.captureBitmap()
                     if (bm != null) {
                         clusterPresentation?.updateMirrorFrame(bm)
+                    }
+                } else if (view is SurfaceView) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isPixelCopyInProgress) {
+                        val surface = view.holder.surface
+                        if (surface != null && surface.isValid) {
+                            val w = if (view.width > 0) view.width else 960
+                            val h = if (view.height > 0) view.height else 540
+                            val targetW = 960.coerceAtMost(w)
+                            val targetH = (targetW * h / w).coerceAtLeast(1)
+                            val bm = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                            isPixelCopyInProgress = true
+                            PixelCopy.request(view, bm, { result ->
+                                isPixelCopyInProgress = false
+                                if (result == PixelCopy.SUCCESS) {
+                                    runOnUiThread { clusterPresentation?.updateMirrorFrame(bm) }
+                                }
+                            }, watchdogHandler)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -1212,18 +1233,21 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
             InCallClusterBridge.projectingListener = { projecting ->
                 AppLog.i("InCallClusterBridge: projectingListener reported: $projecting")
                 runOnUiThread {
-                    if (projecting) {
-                        ensureClusterPresentation()
-                        applyClusterSwipeState()
+                    if (projecting && clusterSwipePosition >= 0) {
+                        ensureClusterPresentation(forceRecreate = true)
                     }
                 }
             }
             if (clusterSwipePosition >= 0) {
-                InCallClusterBridge.openProjection(this)
+                InCallClusterBridge.openProjection(this, forceFull = true)
             }
         }
 
-        ensureClusterPresentation()
+        watchdogHandler.postDelayed({
+            if (clusterSwipePosition >= 0 && clusterPresentation == null) {
+                ensureClusterPresentation(forceRecreate = false)
+            }
+        }, 1000L)
 
         val clusterFilter = IntentFilter(NavigationUpdateIntent.action)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -2327,10 +2351,26 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         return super.dispatchTouchEvent(ev)
     }
 
-    private fun ensureClusterPresentation() {
-        if (clusterPresentation != null) return
-        val display = ClusterPresentation.findDisplay(this) ?: return
-        AppLog.i("Cluster: found display id=${display.displayId} name=${display.name}")
+    private fun ensureClusterPresentation(forceRecreate: Boolean = false) {
+        if (forceRecreate && clusterPresentation != null) {
+            AppLog.i("Cluster: dismissing stale presentation for recreate")
+            clusterPresentation?.dismiss()
+            clusterPresentation = null
+            updateMirrorCaptureState()
+        }
+        if (clusterPresentation != null) {
+            applyClusterSwipeState()
+            return
+        }
+        val display = ClusterPresentation.findDisplay(this)
+        if (display == null) {
+            val msg = "仪表盘: 未检测到副屏Display (仅中控主屏)"
+            AppLog.w("Cluster: $msg")
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AppLog.i("Cluster: Found display id=${display.displayId} name=${display.name}")
+        Toast.makeText(this, "仪表盘: 连接副屏Display ${display.displayId} (${display.name})", Toast.LENGTH_SHORT).show()
         val p = ClusterPresentation(this, display)
         clusterPresentation = p
         p.setOnDismissListener {
@@ -2339,8 +2379,14 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 updateMirrorCaptureState()
             }
         }
-        p.show()
-        applyClusterSwipeState()
+        try {
+            p.show()
+            applyClusterSwipeState()
+        } catch (e: Exception) {
+            val err = "仪表投屏启动失败: ${e.message}"
+            AppLog.e("Cluster: $err", e)
+            Toast.makeText(this, err, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun applyClusterSwipeState() {
@@ -2365,8 +2411,16 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         if (clusterSwipePosition < 1) {
             clusterSwipePosition++
             ClusterPersistence.saveClusterMirrorMode(this, clusterSwipePosition == 0)
-            if (clusterSwipePosition >= 0 && InCallClusterBridge.isAvailable(this)) {
-                InCallClusterBridge.openProjection(this)
+            if (clusterSwipePosition >= 0) {
+                if (InCallClusterBridge.isAvailable(this)) {
+                    InCallClusterBridge.openProjection(this, forceFull = true)
+                }
+                ensureClusterPresentation(forceRecreate = true)
+                watchdogHandler.postDelayed({
+                    if (clusterSwipePosition >= 0 && clusterPresentation == null) {
+                        ensureClusterPresentation(forceRecreate = false)
+                    }
+                }, 1200L)
             }
             applyClusterSwipeState()
             val text = when (clusterSwipePosition) {
@@ -2387,10 +2441,12 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 if (InCallClusterBridge.isAvailable(this)) {
                     InCallClusterBridge.releaseExternalScreen(this)
                 }
+                clusterPresentation?.setMapVisible(false)
             } else {
                 if (InCallClusterBridge.isAvailable(this)) {
-                    InCallClusterBridge.openProjection(this)
+                    InCallClusterBridge.openProjection(this, forceFull = true)
                 }
+                ensureClusterPresentation(forceRecreate = true)
             }
             applyClusterSwipeState()
             val text = when (clusterSwipePosition) {
