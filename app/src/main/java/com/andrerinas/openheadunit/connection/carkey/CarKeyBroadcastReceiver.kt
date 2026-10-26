@@ -42,7 +42,14 @@ class CarKeyBroadcastReceiver : BroadcastReceiver(), CarKeyReceiver {
             "com.bz.action.phone.pickup", // BZ (Joying etc.)
             "com.bz.action.phone.hangup",
             "com.tencent.qqmusiccar.action.MEDIA_BUTTON_INNER_ONKEY",
-            "cn.kuwo.kwmusicauto.action.MEDIA_BUTTON"
+            "cn.kuwo.kwmusicauto.action.MEDIA_BUTTON",
+            // Changan Feiyu OS & InCall Steering Wheel & Media Intents:
+            "com.changan.car.action.KEY_EVENT",
+            "com.changan.media.action.MEDIA_BUTTON",
+            "com.incall.action.MEDIA_BUTTON",
+            "com.incall.action.STEERING_WHEEL_KEY",
+            "com.changan.action.STEERING_KEY",
+            "com.andrerinas.openheadunit.TOGGLE_CLUSTER_MODE"
         )
     }
 
@@ -82,6 +89,11 @@ class CarKeyBroadcastReceiver : BroadcastReceiver(), CarKeyReceiver {
             putExtra("action", action)
             intent.extras?.let { putExtras(it) }
         })
+
+        if (action == "com.andrerinas.openheadunit.TOGGLE_CLUSTER_MODE") {
+            context.sendBroadcast(Intent("com.andrerinas.openheadunit.ACTION_CLUSTER_MODE_TOGGLE"))
+            return
+        }
 
         // Try to abort broadcast to prevent other apps (like built-in radio) from reacting,
         // but ONLY while an active Android Auto projection session is ongoing.
@@ -151,6 +163,16 @@ class CarKeyBroadcastReceiver : BroadcastReceiver(), CarKeyReceiver {
             "com.eryanet.media.pause" -> handleClick(context, 2005)
             "com.bz.action.phone.pickup" -> handleClick(context, 3001)
             "com.bz.action.phone.hangup" -> handleClick(context, 3002)
+            "com.changan.action.STEERING_KEY", "com.incall.action.STEERING_WHEEL_KEY" -> {
+                val keyCode = intent.getIntExtra("keyCode", -1).takeIf { it != -1 }
+                    ?: intent.getIntExtra("keycode", -1)
+                val keyAction = intent.getIntExtra("keyAction", -1)
+                if (keyCode != -1) {
+                    if (keyAction == 0) handleKey(context, keyCode, true)
+                    else if (keyAction == 1) handleKey(context, keyCode, false)
+                    else handleClick(context, keyCode)
+                }
+            }
         }
     }
 }

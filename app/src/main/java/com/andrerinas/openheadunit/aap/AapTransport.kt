@@ -191,6 +191,8 @@ class AapTransport(
     }
     var isAssistantActive = false
     var onAudioFocusStateChanged: ((Boolean) -> Unit)? = null
+    var onVoiceSessionChanged: ((Boolean) -> Unit)? = null
+    var onVoiceNoAudioDetected: (() -> Unit)? = null
     var onUpdateUiConfigReplyReceived: (() -> Unit)? = null
 
     /** What the phone selected in the version handshake, or null before it has answered. */

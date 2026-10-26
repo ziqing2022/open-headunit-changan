@@ -13,7 +13,7 @@ object ClusterPersistence {
     const val DEFAULT_CLUSTER_TURN_CARD_Y_PX = 40
 
     const val DEFAULT_CLUSTER_ETA_CARD_X_PX = 40
-    const val DEFAULT_CLUSTER_ETA_CARD_Y_PX = 540
+    const val DEFAULT_CLUSTER_ETA_CARD_Y_PX = 440 // Elevated to 440px to clear steering wheel bottom blind spot
 
     const val DEFAULT_CLUSTER_SONG_CARD_X_PX = 1300
     const val DEFAULT_CLUSTER_SONG_CARD_PX = DEFAULT_CLUSTER_SONG_CARD_X_PX
@@ -108,5 +108,14 @@ object ClusterPersistence {
 
     fun saveCardAlpha(context: Context, card: String, alpha: Int) {
         prefs(context).edit().putInt("cluster_${card}_alpha", alpha.coerceIn(0, 100)).apply()
+    }
+
+    private const val KEY_CLUSTER_SAFE_ZONE_BOTTOM = "cluster_safe_zone_bottom_px"
+
+    fun loadClusterSafeZoneBottomPx(context: Context): Int =
+        prefs(context).getInt(KEY_CLUSTER_SAFE_ZONE_BOTTOM, 100).coerceIn(0, 300)
+
+    fun saveClusterSafeZoneBottomPx(context: Context, px: Int) {
+        prefs(context).edit().putInt(KEY_CLUSTER_SAFE_ZONE_BOTTOM, px.coerceIn(0, 300)).apply()
     }
 }

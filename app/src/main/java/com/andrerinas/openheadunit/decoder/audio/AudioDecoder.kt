@@ -151,16 +151,22 @@ class AudioDecoder {
                 audioTracks.clear()
                 releaseMixer()
             }
+            val safeStream = if (stream == android.media.AudioManager.STREAM_NOTIFICATION) {
+                android.media.AudioManager.STREAM_MUSIC
+            } else {
+                stream
+            }
             if (staticAudioFocus && mixer == null) {
-                mixer = AudioMixer(stream, attachHwDspEqualizer, preferAAudio = preferAAudio,
+                mixer = AudioMixer(safeStream, attachHwDspEqualizer, preferAAudio = preferAAudio,
                     keepOutputActive = true, duckMediaForSpeech = true, canRender = callbacks.canRender)
                     .also { it.start() }
                 createdSharedMixer = true
-                AppLog.i("AudioDecoder: Created shared AudioMixer on channel $channel")
+                AppLog.i("AudioDecoder: Created shared AudioMixer on channel $channel (stream=$safeStream)")
             }
             // Independent instances preserve per-stream routing when static focus is off.
             sinkMixer = if (staticAudioFocus) checkNotNull(mixer) else {
-                AudioMixer(stream, attachHwDspEqualizer, audioLatencyMultiplier, preferAAudio,
+                AudioMixer(safeStream, attachHwDspEqualizer, audioLatencyMultiplier, preferAAudio,
+                    duckMediaForSpeech = true,
                     canRender = callbacks.canRender,
                     onRecoveryActivity = { callbacks.activity(channel, owner) }).also { it.start() }
             }

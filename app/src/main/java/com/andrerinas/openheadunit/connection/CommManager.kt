@@ -210,6 +210,8 @@ class CommManager(
 
     /** Callback for audio focus state changes (isPlaying). Set by AapService. */
     var onAudioFocusStateChanged: ((Boolean) -> Unit)? = null
+    var onVoiceSessionChanged: ((Boolean) -> Unit)? = null
+    var onVoiceNoAudioDetected: (() -> Unit)? = null
 
     /** Latest now-playing metadata, delivered on Main with its owning session. Set by AapService. */
     var onAaMediaMetadata: ((MediaPlayback.MediaMetaData, AaPresentationSession) -> Unit)? = null
@@ -1012,6 +1014,8 @@ class CommManager(
                         // A late quit belongs only to the transport that installed this callback.
                         candidate.onQuit = { isClean -> transportedQuited(candidate, isClean) }
                         candidate.onAudioFocusStateChanged = { isPlaying -> onAudioFocusStateChanged?.invoke(isPlaying) }
+                        candidate.onVoiceSessionChanged = { active -> onVoiceSessionChanged?.invoke(active) }
+                        candidate.onVoiceNoAudioDetected = { onVoiceNoAudioDetected?.invoke() }
                         candidate.onUpdateUiConfigReplyReceived = { onUpdateUiConfigReplyReceived?.invoke() }
                         _transport = candidate
                     }

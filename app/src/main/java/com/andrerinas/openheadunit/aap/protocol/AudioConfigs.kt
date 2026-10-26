@@ -27,8 +27,8 @@ object AudioConfigs {
     {
         if (!separateAudioStreams) return mediaStream
         return when(channel) {
-            Channel.ID_AU1 -> guidanceStream
-            Channel.ID_AU2 -> systemStream
+            Channel.ID_AU1 -> if (guidanceStream == AudioManager.STREAM_NOTIFICATION) mediaStream else guidanceStream
+            Channel.ID_AU2 -> if (systemStream == AudioManager.STREAM_NOTIFICATION) mediaStream else systemStream
             else -> mediaStream
         }
     }

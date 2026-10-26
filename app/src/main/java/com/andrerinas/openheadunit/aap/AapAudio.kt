@@ -576,7 +576,15 @@ internal class AapAudio(
         audioDecoder.preparePlayback(channel, decoderSession)?.let { onAudioPlaybackStarted(channel, it) }
     }
 
+    @Volatile
+    private var lastSpeechAudioMs = 0L
+
+    fun hasReceivedSpeechAudio(sinceMs: Long): Boolean = lastSpeechAudioMs >= sinceMs
+
     private fun decode(channel: Int, start: Int, buf: ByteArray, len: Int) {
+        if (channel == Channel.ID_AU1) {
+            lastSpeechAudioMs = SystemClock.elapsedRealtime()
+        }
         var length = len
         if (length > AUDIO_BUFS_SIZE) {
             AppLog.e("Error audio len: %d  aud_buf_BUFS_SIZE: %d", length, AUDIO_BUFS_SIZE)

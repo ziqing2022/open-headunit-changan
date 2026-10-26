@@ -3,6 +3,9 @@ package com.andrerinas.openheadunit.aap
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import com.andrerinas.openheadunit.aap.protocol.Channel
 import com.andrerinas.openheadunit.aap.protocol.messages.DrivingStatusEvent
 import com.andrerinas.openheadunit.aap.protocol.messages.LocationUpdateEvent
@@ -394,13 +397,31 @@ internal class AapControlService(
         return -1
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var lastVoiceStartTimeMs = 0L
+    private val voiceWatchdog = Runnable {
+        if (aapTransport.isAssistantActive) {
+            val hasReceivedSpeech = aapAudio.hasReceivedSpeechAudio(lastVoiceStartTimeMs)
+            if (!hasReceivedSpeech) {
+                AppLog.w("AapControl: Voice session active for 1500ms without audio data, notifying fallback")
+                aapTransport.onVoiceNoAudioDetected?.invoke()
+            }
+        }
+    }
+
     private fun voiceSessionNotification(request: Control.VoiceSessionNotification): Int {
         if (request.status == Control.VoiceSessionNotification.VoiceSessionStatus.VOICE_STATUS_START) {
             AppLog.i("Voice Session Notification: START")
             aapTransport.isAssistantActive = true
+            aapTransport.onVoiceSessionChanged?.invoke(true)
+            lastVoiceStartTimeMs = SystemClock.elapsedRealtime()
+            mainHandler.removeCallbacks(voiceWatchdog)
+            mainHandler.postDelayed(voiceWatchdog, 1500L)
         } else if (request.status == Control.VoiceSessionNotification.VoiceSessionStatus.VOICE_STATUS_STOP) {
             AppLog.i("Voice Session Notification: STOP")
             aapTransport.isAssistantActive = false
+            mainHandler.removeCallbacks(voiceWatchdog)
+            aapTransport.onVoiceSessionChanged?.invoke(false)
         }
         return 0
     }

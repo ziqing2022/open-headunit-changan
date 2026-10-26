@@ -46,6 +46,7 @@ class ClusterPresentation(
     private var mirrorView: ClusterMirrorView? = null
     private var standbyLayout: LinearLayout? = null
     private var clockTextView: TextView? = null
+    private var speedTextView: TextView? = null
     private var turnCardView: ClusterTurnCardView? = null
     private var etaCardView: ClusterEtaCardView? = null
     private var songView: ClusterSongView? = null
@@ -58,6 +59,14 @@ class ClusterPresentation(
     private val clockRunnable = object : Runnable {
         override fun run() {
             clockTextView?.text = clockFormat.format(Date())
+            val loc = com.andrerinas.openheadunit.location.LocationHolder.currentLocation(context)
+            if (loc != null && loc.hasSpeed()) {
+                val kmh = kotlin.math.roundToInt(loc.speed * 3.6f)
+                speedTextView?.text = "$kmh km/h"
+                speedTextView?.visibility = View.VISIBLE
+            } else {
+                speedTextView?.text = "0 km/h"
+            }
             mainHandler.postDelayed(this, 1000L)
         }
     }
@@ -121,18 +130,29 @@ class ClusterPresentation(
             setTextColor(Color.WHITE)
             paint.isFakeBoldText = true
             gravity = Gravity.CENTER
-            setPadding(0, 12, 0, 8)
+            setPadding(0, 12, 0, 4)
         }
         clockTextView = clockTv
 
+        val speedTv = TextView(context).apply {
+            text = "0 km/h"
+            textSize = 32f
+            setTextColor(Color.parseColor("#00E5FF"))
+            paint.isFakeBoldText = true
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 10)
+        }
+        speedTextView = speedTv
+
         val subTv = TextView(context).apply {
-            text = "等待手机导航启动…"
+            text = "等待手机导航启动 · 三指横滑切换仪表"
             textSize = 18f
             setTextColor(Color.parseColor("#88FFFFFF"))
             gravity = Gravity.CENTER
         }
         standby.addView(titleTv)
         standby.addView(clockTv)
+        standby.addView(speedTv)
         standby.addView(subTv)
 
         val standbyParams = FrameLayout.LayoutParams(

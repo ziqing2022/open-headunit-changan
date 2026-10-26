@@ -28,6 +28,8 @@ import com.andrerinas.openheadunit.cluster.ClusterTurnGuidance
 import com.andrerinas.openheadunit.cluster.ClusterSong
 import com.andrerinas.openheadunit.cluster.ClusterPersistence
 import com.andrerinas.openheadunit.cluster.InCallClusterBridge
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import android.hardware.display.DisplayManager
 import com.andrerinas.openheadunit.contract.NavigationUpdateIntent
 import androidx.activity.OnBackPressedCallback
@@ -108,7 +110,36 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
     private var clusterPresentation: ClusterPresentation? = null
     private var clusterSwipePosition = 0 // -1 = native car screen, 0 = mirror, 1 = nav cards
     private var isClusterNavReceiverRegistered = false
+    private var isClusterToggleReceiverRegistered = false
     private var isClusterDisplayListenerRegistered = false
+    private var textToSpeech: TextToSpeech? = null
+
+    private val clusterToggleReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.andrerinas.openheadunit.ACTION_CLUSTER_MODE_TOGGLE") {
+                toggleClusterMode()
+            }
+        }
+    }
+
+    fun toggleClusterMode() {
+        val nextPos = if (clusterSwipePosition == 0) 1 else 0
+        applyClusterPosition(nextPos)
+        val modeStr = if (nextPos == 0) "全屏镜像" else "极简卡片"
+        Toast.makeText(this, "已切换仪表模式：$modeStr", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun initTts() {
+        try {
+            textToSpeech = TextToSpeech(applicationContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    textToSpeech?.language = Locale.CHINESE
+                }
+            }
+        } catch (e: Exception) {
+            AppLog.w("AapProjectionActivity: TTS init failed: ${e.message}")
+        }
+    }
 
     private val clusterDisplayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) {
@@ -1257,6 +1288,15 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         }
         isClusterNavReceiverRegistered = true
 
+        val toggleFilter = IntentFilter("com.andrerinas.openheadunit.ACTION_CLUSTER_MODE_TOGGLE")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(clusterToggleReceiver, toggleFilter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(clusterToggleReceiver, toggleFilter)
+        }
+        isClusterToggleReceiverRegistered = true
+        initTts()
+
         val prevMetadataCallback = commManager.onAaMediaMetadata
         commManager.onAaMediaMetadata = { meta, session ->
             prevMetadataCallback?.invoke(meta, session)
@@ -1272,6 +1312,24 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 }
                 val song = ClusterSong(title = title, artist = artist, playing = true, artwork = artBitmap)
                 clusterPresentation?.updateSong(song)
+            }
+        }
+
+        commManager.onVoiceSessionChanged = { active ->
+            runOnUiThread {
+                if (active) {
+                    Toast.makeText(this@AapProjectionActivity, "语音播报已激活", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        commManager.onVoiceNoAudioDetected = {
+            runOnUiThread {
+                Toast.makeText(
+                    this@AapProjectionActivity,
+                    "手机端语音服务未输出音频 (请检查手机网络/Google语音服务)",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
 
@@ -2814,6 +2872,17 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         if (isClusterNavReceiverRegistered) {
             unregisterReceiver(clusterNavigationReceiver)
             isClusterNavReceiverRegistered = false
+        }
+        if (isClusterToggleReceiverRegistered) {
+            unregisterReceiver(clusterToggleReceiver)
+            isClusterToggleReceiverRegistered = false
+        }
+        try {
+            textToSpeech?.stop()
+            textToSpeech?.shutdown()
+            textToSpeech = null
+        } catch (e: Exception) {
+            // ignore
         }
         (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)?.unregisterDisplayListener(clusterDisplayListener)
         mirrorCaptureActive = false
