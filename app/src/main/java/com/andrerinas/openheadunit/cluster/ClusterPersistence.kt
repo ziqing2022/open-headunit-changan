@@ -111,11 +111,30 @@ object ClusterPersistence {
     }
 
     private const val KEY_CLUSTER_SAFE_ZONE_BOTTOM = "cluster_safe_zone_bottom_px"
+    private const val KEY_CLUSTER_THEME = "cluster_theme"
 
     fun loadClusterSafeZoneBottomPx(context: Context): Int =
         prefs(context).getInt(KEY_CLUSTER_SAFE_ZONE_BOTTOM, 100).coerceIn(0, 300)
 
     fun saveClusterSafeZoneBottomPx(context: Context, px: Int) {
         prefs(context).edit().putInt(KEY_CLUSTER_SAFE_ZONE_BOTTOM, px.coerceIn(0, 300)).apply()
+    }
+
+    fun loadClusterTheme(context: Context): ClusterTheme {
+        val id = prefs(context).getString(KEY_CLUSTER_THEME, ClusterTheme.CYBER_BLUE.id)
+        return ClusterTheme.fromId(id)
+    }
+
+    fun saveClusterTheme(context: Context, theme: ClusterTheme) {
+        prefs(context).edit().putString(KEY_CLUSTER_THEME, theme.id).apply()
+    }
+
+    fun nextClusterTheme(context: Context): ClusterTheme {
+        val current = loadClusterTheme(context)
+        val all = ClusterTheme.values()
+        val nextIdx = (current.ordinal + 1) % all.size
+        val next = all[nextIdx]
+        saveClusterTheme(context, next)
+        return next
     }
 }

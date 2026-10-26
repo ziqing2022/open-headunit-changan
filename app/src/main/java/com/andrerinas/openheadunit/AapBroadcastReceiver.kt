@@ -43,6 +43,16 @@ class AapBroadcastReceiver : BroadcastReceiver() {
 
             if (component.settings.useGpsForNavigation) {
                 component.commManager.send(LocationUpdateEvent(location))
+                if (location.hasSpeed()) {
+                    component.commManager.send(com.andrerinas.openheadunit.aap.protocol.messages.CarSpeedEvent(location.speed))
+                    val gear = if (location.speed > 0.5f) {
+                        com.andrerinas.openheadunit.aap.protocol.proto.Sensors.SensorBatch.GearData.GEAR.DRIVE
+                    } else {
+                        com.andrerinas.openheadunit.aap.protocol.proto.Sensors.SensorBatch.GearData.GEAR.PARK
+                    }
+                    component.commManager.send(com.andrerinas.openheadunit.aap.protocol.messages.GearEvent(gear))
+                    component.commManager.send(com.andrerinas.openheadunit.aap.protocol.messages.ParkingBrakeEvent(location.speed < 0.5f))
+                }
             }
 
             if (location.latitude != 0.0 && location.longitude != 0.0) {

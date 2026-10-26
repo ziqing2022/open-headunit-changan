@@ -44,6 +44,12 @@ internal class ServiceDiscoveryResponse(context: Context, audioConfig: AudioSess
                     sources.addSensors(makeSensorType(Sensors.SensorType.NIGHT))
                     AppLog.i("[ServiceDiscovery] Announcing NIGHT sensor support. Strategy: ${settings.nightMode}")
 
+                    // Announce Speed, Gear, and Parking Brake sensors for vehicle telemetry uplink (dead-reckoning)
+                    sources.addSensors(makeSensorType(Sensors.SensorType.CAR_SPEED))
+                    sources.addSensors(makeSensorType(Sensors.SensorType.GEAR))
+                    sources.addSensors(makeSensorType(Sensors.SensorType.PARKING_BRAKE))
+                    AppLog.i("[ServiceDiscovery] Announcing CAR_SPEED, GEAR, PARKING_BRAKE sensor support")
+
                 }.build()
             }.build()
 

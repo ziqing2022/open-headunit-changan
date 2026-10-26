@@ -9,6 +9,9 @@ import android.os.SystemClock
 import com.andrerinas.openheadunit.aap.protocol.Channel
 import com.andrerinas.openheadunit.aap.protocol.messages.DrivingStatusEvent
 import com.andrerinas.openheadunit.aap.protocol.messages.LocationUpdateEvent
+import com.andrerinas.openheadunit.aap.protocol.messages.CarSpeedEvent
+import com.andrerinas.openheadunit.aap.protocol.messages.GearEvent
+import com.andrerinas.openheadunit.aap.protocol.messages.ParkingBrakeEvent
 import com.andrerinas.openheadunit.aap.protocol.messages.ServiceDiscoveryResponse
 import com.andrerinas.openheadunit.aap.protocol.proto.Common
 import com.andrerinas.openheadunit.aap.protocol.proto.Control
@@ -299,6 +302,26 @@ internal class AapControlSensor(
             } else {
                 AppLog.i("LOCATION sensor requested. No recent GPS fix to prime with.")
             }
+        }
+
+        if (request.type == Sensors.SensorType.CAR_SPEED) {
+            val speed = LocationHolder.currentLocation(context)?.takeIf { it.hasSpeed() }?.speed ?: 0f
+            aapTransport.send(CarSpeedEvent(speed))
+            AppLog.i("CAR_SPEED sensor requested. Prime speed=$speed m/s")
+        }
+
+        if (request.type == Sensors.SensorType.GEAR) {
+            val speed = LocationHolder.currentLocation(context)?.takeIf { it.hasSpeed() }?.speed ?: 0f
+            val gear = if (speed > 0.5f) Sensors.SensorBatch.GearData.GEAR.DRIVE else Sensors.SensorBatch.GearData.GEAR.PARK
+            aapTransport.send(GearEvent(gear))
+            AppLog.i("GEAR sensor requested. Prime gear=$gear")
+        }
+
+        if (request.type == Sensors.SensorType.PARKING_BRAKE) {
+            val speed = LocationHolder.currentLocation(context)?.takeIf { it.hasSpeed() }?.speed ?: 0f
+            val brake = speed < 0.5f
+            aapTransport.send(ParkingBrakeEvent(brake))
+            AppLog.i("PARKING_BRAKE sensor requested. Prime engaged=$brake")
         }
         return 0
     }

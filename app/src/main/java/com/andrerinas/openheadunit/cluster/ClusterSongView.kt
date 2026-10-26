@@ -27,6 +27,7 @@ internal class ClusterSongView(context: Context) : View(context) {
     private var posY = Float.NaN
     private var overlayScale = Float.NaN
     private var cardAlpha = 50
+    private var currentTheme: ClusterTheme = ClusterPersistence.loadClusterTheme(context)
 
     init {
         cardAlpha = ClusterPersistence.loadCardAlpha(context, "song", 50)
@@ -50,6 +51,18 @@ internal class ClusterSongView(context: Context) : View(context) {
         posY = Float.NaN
         overlayScale = Float.NaN
         cardAlpha = ClusterPersistence.loadCardAlpha(context, "song", 50)
+        setTheme(ClusterPersistence.loadClusterTheme(context))
+        invalidate()
+    }
+
+    fun setTheme(theme: ClusterTheme) {
+        currentTheme = theme
+        artistPaint.color = Color.argb(
+            210,
+            Color.red(theme.secondaryAccent),
+            Color.green(theme.secondaryAccent),
+            Color.blue(theme.secondaryAccent)
+        )
         invalidate()
     }
 

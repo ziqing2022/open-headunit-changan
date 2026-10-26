@@ -45,6 +45,7 @@ class ClusterPresentation(
 
     private var mirrorView: ClusterMirrorView? = null
     private var standbyLayout: LinearLayout? = null
+    private var titleTextView: TextView? = null
     private var clockTextView: TextView? = null
     private var speedTextView: TextView? = null
     private var turnCardView: ClusterTurnCardView? = null
@@ -53,6 +54,7 @@ class ClusterPresentation(
     private var rootView: FrameLayout? = null
 
     private var mirrorMode = true
+    private var currentTheme = ClusterPersistence.loadClusterTheme(context)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
@@ -124,6 +126,7 @@ class ClusterPresentation(
             setTextColor(Color.parseColor("#4A90E2"))
             gravity = Gravity.CENTER
         }
+        titleTextView = titleTv
         val clockTv = TextView(context).apply {
             text = clockFormat.format(Date())
             textSize = 58f
@@ -172,6 +175,8 @@ class ClusterPresentation(
         root.addView(songView, FrameLayout.LayoutParams(-1, -1))
 
         setContentView(root)
+
+        applyTheme(currentTheme)
 
         mirrorMode = ClusterPersistence.loadClusterMirrorMode(context)
         setMode(mirrorMode)
@@ -276,7 +281,22 @@ class ClusterPresentation(
         songView?.setSong(song)
     }
 
+    fun applyTheme(theme: ClusterTheme) {
+        currentTheme = theme
+        val gd = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(theme.backgroundStart, theme.backgroundEnd)
+        )
+        rootView?.background = gd
+        titleTextView?.setTextColor(theme.primaryAccent)
+        speedTextView?.setTextColor(theme.speedColor)
+        turnCardView?.setTheme(theme)
+        etaCardView?.setTheme(theme)
+        songView?.setTheme(theme)
+    }
+
     fun notifySettingsChanged() {
+        applyTheme(ClusterPersistence.loadClusterTheme(context))
         turnCardView?.notifyPositionChanged()
         etaCardView?.notifyPositionChanged()
         songView?.notifyPositionChanged()

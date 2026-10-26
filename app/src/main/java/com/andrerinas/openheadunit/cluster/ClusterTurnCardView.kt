@@ -22,8 +22,8 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
     private var yPx = ClusterPersistence.DEFAULT_CLUSTER_TURN_CARD_Y_PX
     private var scalePercent = ClusterPersistence.CLUSTER_CARD_SCALE_DEFAULT
     private var backgroundAlpha = 50
-
-    private val accent = Color.rgb(10, 132, 255)
+    private var currentTheme: ClusterTheme = ClusterPersistence.loadClusterTheme(context)
+    private var accent = currentTheme.primaryAccent
     private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent }
     private val badgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -64,6 +64,16 @@ internal class ClusterTurnCardView(context: Context) : View(context) {
         yPx = ClusterPersistence.loadCardY(context, "turn", ClusterPersistence.DEFAULT_CLUSTER_TURN_CARD_Y_PX)
         scalePercent = ClusterPersistence.loadCardScalePercent(context, "turn")
         backgroundAlpha = ClusterPersistence.loadCardAlpha(context, "turn", 50)
+        setTheme(ClusterPersistence.loadClusterTheme(context))
+        invalidate()
+    }
+
+    fun setTheme(theme: ClusterTheme) {
+        currentTheme = theme
+        accent = theme.primaryAccent
+        badgePaint.color = accent
+        glyph = null
+        glyphTag = -1
         invalidate()
     }
 

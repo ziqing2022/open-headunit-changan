@@ -113,13 +113,31 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
     private var isClusterToggleReceiverRegistered = false
     private var isClusterDisplayListenerRegistered = false
     private var textToSpeech: TextToSpeech? = null
+    private var smartDockView: com.andrerinas.openheadunit.view.SmartOverlayDockView? = null
+
+    private val speedUpdateRunnable = object : Runnable {
+        override fun run() {
+            val loc = com.andrerinas.openheadunit.location.LocationHolder.currentLocation(this@AapProjectionActivity)
+            val kmh = if (loc != null && loc.hasSpeed()) (loc.speed * 3.6f + 0.5f).toInt() else 0
+            smartDockView?.updateSpeed(kmh)
+            watchdogHandler.postDelayed(this, 1000L)
+        }
+    }
 
     private val clusterToggleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.andrerinas.openheadunit.ACTION_CLUSTER_MODE_TOGGLE") {
-                toggleClusterMode()
+            when (intent?.action) {
+                "com.andrerinas.openheadunit.ACTION_CLUSTER_MODE_TOGGLE" -> toggleClusterMode()
+                "com.andrerinas.openheadunit.ACTION_CLUSTER_THEME_CYCLE" -> cycleClusterTheme()
             }
         }
+    }
+
+    fun cycleClusterTheme() {
+        val nextTheme = ClusterPersistence.nextClusterTheme(this)
+        clusterPresentation?.applyTheme(nextTheme)
+        smartDockView?.updateStateLabels()
+        Toast.makeText(this, "仪表主题：${nextTheme.displayName}", Toast.LENGTH_SHORT).show()
     }
 
     fun toggleClusterMode() {
@@ -127,6 +145,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         clusterSwipePosition = nextPos
         ClusterPersistence.saveClusterMirrorMode(this, clusterSwipePosition == 0)
         applyClusterSwipeState()
+        smartDockView?.updateStateLabels()
         val modeStr = if (nextPos == 0) "整机镜像" else "极简导航卡片"
         Toast.makeText(this, "仪表盘模式：$modeStr", Toast.LENGTH_SHORT).show()
     }
@@ -141,6 +160,45 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         } catch (e: Exception) {
             AppLog.w("AapProjectionActivity: TTS init failed: ${e.message}")
         }
+    }
+
+    private fun attachSmartDockView() {
+        val container = findViewById<FrameLayout>(R.id.container) ?: return
+        val dock = com.andrerinas.openheadunit.view.SmartOverlayDockView(this).apply {
+            onToggleClusterMode = {
+                toggleClusterMode()
+                updateStateLabels()
+            }
+            onCycleTheme = {
+                val nextTheme = ClusterPersistence.nextClusterTheme(this@AapProjectionActivity)
+                clusterPresentation?.applyTheme(nextTheme)
+                Toast.makeText(this@AapProjectionActivity, "仪表主题：${nextTheme.displayName}", Toast.LENGTH_SHORT).show()
+                nextTheme
+            }
+            onTestVoice = {
+                if (textToSpeech != null) {
+                    textToSpeech?.speak("长安汽车与 Android Auto 无边界融合桌面已连接，语音播报正常", TextToSpeech.QUEUE_FLUSH, null, "TEST_TTS")
+                    Toast.makeText(this@AapProjectionActivity, "测试语音播报已触发", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@AapProjectionActivity, "TTS 引擎初始化中，请稍候", Toast.LENGTH_SHORT).show()
+                }
+            }
+            onReturnCarHome = {
+                try {
+                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_HOME)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(homeIntent)
+                } catch (e: Exception) {
+                    AppLog.w("Failed to launch car home intent: ${e.message}")
+                }
+            }
+        }
+        container.addView(dock)
+        dock.bringToFront()
+        smartDockView = dock
+        watchdogHandler.post(speedUpdateRunnable)
     }
 
     private val clusterDisplayListener = object : DisplayManager.DisplayListener {
@@ -1290,7 +1348,10 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         }
         isClusterNavReceiverRegistered = true
 
-        val toggleFilter = IntentFilter("com.andrerinas.openheadunit.ACTION_CLUSTER_MODE_TOGGLE")
+        val toggleFilter = IntentFilter().apply {
+            addAction("com.andrerinas.openheadunit.ACTION_CLUSTER_MODE_TOGGLE")
+            addAction("com.andrerinas.openheadunit.ACTION_CLUSTER_THEME_CYCLE")
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(clusterToggleReceiver, toggleFilter, Context.RECEIVER_EXPORTED)
         } else {
@@ -1298,6 +1359,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         }
         isClusterToggleReceiverRegistered = true
         initTts()
+        attachSmartDockView()
 
         val prevMetadataCallback = commManager.onAaMediaMetadata
         commManager.onAaMediaMetadata = { meta, session ->
@@ -1479,6 +1541,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
 
         container.addView(overlayView)
         overlayView.requestFocus()
+        smartDockView?.bringToFront()
         setFullscreen() // Call setFullscreen here as well
 
         val loadingOverlay = findViewById<View>(R.id.loading_overlay)
@@ -2889,6 +2952,8 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         (getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager)?.unregisterDisplayListener(clusterDisplayListener)
         mirrorCaptureActive = false
         watchdogHandler.removeCallbacks(mirrorCaptureRunnable)
+        watchdogHandler.removeCallbacks(speedUpdateRunnable)
+        smartDockView = null
         InCallClusterBridge.projectingListener = null
         InCallClusterBridge.releaseExternalScreen(this)
         clusterPresentation?.dismiss()
@@ -3044,6 +3109,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         // Baseline for the "no frame drawn while streaming" renderer check (issue #767).
         projectionStartMs = SystemClock.elapsedRealtime()
         performanceOverlay.bringToFront()
+        smartDockView?.bringToFront()
     }
 
     private fun attachPerformanceOverlay() {

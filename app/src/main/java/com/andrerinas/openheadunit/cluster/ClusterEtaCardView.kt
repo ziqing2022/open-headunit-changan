@@ -25,6 +25,7 @@ internal class ClusterEtaCardView(context: Context) : View(context) {
     private var posY = Float.NaN
     private var overlayScale = Float.NaN
     private var backgroundAlpha = 50
+    private var currentTheme: ClusterTheme = ClusterPersistence.loadClusterTheme(context)
     private var lastArrivalLine = ""
     private var lastArrivalSize = 0f
     private var lastSubLine = ""
@@ -42,6 +43,18 @@ internal class ClusterEtaCardView(context: Context) : View(context) {
         posY = Float.NaN
         overlayScale = Float.NaN
         backgroundAlpha = ClusterPersistence.loadCardAlpha(context, "eta", 50)
+        setTheme(ClusterPersistence.loadClusterTheme(context))
+        invalidate()
+    }
+
+    fun setTheme(theme: ClusterTheme) {
+        currentTheme = theme
+        subPaint.color = Color.argb(
+            220,
+            Color.red(theme.secondaryAccent),
+            Color.green(theme.secondaryAccent),
+            Color.blue(theme.secondaryAccent)
+        )
         invalidate()
     }
 

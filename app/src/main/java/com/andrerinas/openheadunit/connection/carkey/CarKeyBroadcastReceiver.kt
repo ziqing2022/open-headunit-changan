@@ -49,7 +49,8 @@ class CarKeyBroadcastReceiver : BroadcastReceiver(), CarKeyReceiver {
             "com.incall.action.MEDIA_BUTTON",
             "com.incall.action.STEERING_WHEEL_KEY",
             "com.changan.action.STEERING_KEY",
-            "com.andrerinas.openheadunit.TOGGLE_CLUSTER_MODE"
+            "com.andrerinas.openheadunit.TOGGLE_CLUSTER_MODE",
+            "com.andrerinas.openheadunit.CYCLE_CLUSTER_THEME"
         )
     }
 
@@ -92,6 +93,11 @@ class CarKeyBroadcastReceiver : BroadcastReceiver(), CarKeyReceiver {
 
         if (action == "com.andrerinas.openheadunit.TOGGLE_CLUSTER_MODE") {
             context.sendBroadcast(Intent("com.andrerinas.openheadunit.ACTION_CLUSTER_MODE_TOGGLE"))
+            return
+        }
+
+        if (action == "com.andrerinas.openheadunit.CYCLE_CLUSTER_THEME") {
+            context.sendBroadcast(Intent("com.andrerinas.openheadunit.ACTION_CLUSTER_THEME_CYCLE"))
             return
         }
 
