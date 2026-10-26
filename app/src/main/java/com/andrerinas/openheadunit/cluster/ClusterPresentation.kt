@@ -61,7 +61,7 @@ class ClusterPresentation(
             clockTextView?.text = clockFormat.format(Date())
             val loc = com.andrerinas.openheadunit.location.LocationHolder.currentLocation(context)
             if (loc != null && loc.hasSpeed()) {
-                val kmh = kotlin.math.roundToInt(loc.speed * 3.6f)
+                val kmh = (loc.speed * 3.6f + 0.5f).toInt()
                 speedTextView?.text = "$kmh km/h"
                 speedTextView?.visibility = View.VISIBLE
             } else {

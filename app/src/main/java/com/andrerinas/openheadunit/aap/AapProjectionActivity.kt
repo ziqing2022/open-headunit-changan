@@ -124,9 +124,11 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
 
     fun toggleClusterMode() {
         val nextPos = if (clusterSwipePosition == 0) 1 else 0
-        applyClusterPosition(nextPos)
-        val modeStr = if (nextPos == 0) "全屏镜像" else "极简卡片"
-        Toast.makeText(this, "已切换仪表模式：$modeStr", Toast.LENGTH_SHORT).show()
+        clusterSwipePosition = nextPos
+        ClusterPersistence.saveClusterMirrorMode(this, clusterSwipePosition == 0)
+        applyClusterSwipeState()
+        val modeStr = if (nextPos == 0) "整机镜像" else "极简导航卡片"
+        Toast.makeText(this, "仪表盘模式：$modeStr", Toast.LENGTH_SHORT).show()
     }
 
     private fun initTts() {
