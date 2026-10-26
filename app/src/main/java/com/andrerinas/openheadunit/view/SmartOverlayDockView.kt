@@ -212,11 +212,8 @@ class SmartOverlayDockView @JvmOverloads constructor(
 
         // Chip 2: Cluster Theme
         val (themeChip, themeSub) = createChip("仪表主题", "科技深蓝") {
-            val newTheme = onCycleTheme?.invoke()
-            if (newTheme != null) {
-                themeSub.text = newTheme.displayName
-                updateStateLabels()
-            }
+            onCycleTheme?.invoke()
+            updateStateLabels()
         }
         themeChipTv = themeSub
 
