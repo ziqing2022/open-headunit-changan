@@ -34,6 +34,7 @@ class SmartOverlayDockView @JvmOverloads constructor(
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     var onToggleClusterMode: (() -> Unit)? = null
+    var onCycleScaleMode: (() -> ClusterPersistence.ClusterScaleMode)? = null
     var onCycleTheme: (() -> ClusterTheme)? = null
     var onTestVoice: (() -> Unit)? = null
     var onReturnCarHome: (() -> Unit)? = null
@@ -50,6 +51,7 @@ class SmartOverlayDockView @JvmOverloads constructor(
     private val expandedLayout: LinearLayout
     private val themeChipTv: TextView
     private val modeChipTv: TextView
+    private val scaleChipTv: TextView
 
     init {
         layoutTransition = LayoutTransition().apply {
@@ -210,24 +212,35 @@ class SmartOverlayDockView @JvmOverloads constructor(
         }
         modeChipTv = modeSub
 
-        // Chip 2: Cluster Theme
+        // Chip 2: Cluster Scale Mode
+        val (scaleChip, scaleSub) = createChip("画面比例", "裁剪铺满") {
+            val next = onCycleScaleMode?.invoke()
+            if (next != null) {
+                scaleChipTv.text = next.title
+            }
+            updateStateLabels()
+        }
+        scaleChipTv = scaleSub
+
+        // Chip 3: Cluster Theme
         val (themeChip, themeSub) = createChip("仪表主题", "科技深蓝") {
             onCycleTheme?.invoke()
             updateStateLabels()
         }
         themeChipTv = themeSub
 
-        // Chip 3: Audio/TTS Test
+        // Chip 4: Audio/TTS Test
         val (ttsChip, _) = createChip("播报测试", "通道保活") {
             onTestVoice?.invoke()
         }
 
-        // Chip 4: Return to Car Launcher
+        // Chip 5: Return to Car Launcher
         val (homeChip, _) = createChip("原车桌面", "融合返回") {
             onReturnCarHome?.invoke()
         }
 
         chipsRow.addView(modeChip)
+        chipsRow.addView(scaleChip)
         chipsRow.addView(themeChip)
         chipsRow.addView(ttsChip)
         chipsRow.addView(homeChip)
@@ -262,11 +275,13 @@ class SmartOverlayDockView @JvmOverloads constructor(
     fun updateStateLabels() {
         val isMirror = ClusterPersistence.loadClusterMirrorMode(context)
         val currentTheme = ClusterPersistence.loadClusterTheme(context)
+        val currentScaleMode = ClusterPersistence.loadClusterScaleMode(context)
         val modeStr = if (isMirror) "整机镜像" else "极简卡片"
 
         modeChipTv.text = modeStr
+        scaleChipTv.text = currentScaleMode.title
         themeChipTv.text = currentTheme.displayName
-        statusTv.text = "$modeStr · ${currentTheme.displayName}"
+        statusTv.text = "$modeStr · ${currentScaleMode.title} · ${currentTheme.displayName}"
         speedTv.setTextColor(currentTheme.speedColor)
     }
 

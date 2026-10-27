@@ -25,6 +25,18 @@ object ClusterPersistence {
 
     private const val KEY_CLUSTER_MIRROR_MODE = "cluster_mirror_mode"
     private const val KEY_CLUSTER_MIRROR_LEFT_CROP = "cluster_mirror_left_crop_px"
+    private const val KEY_CLUSTER_SCALE_MODE = "cluster_scale_mode"
+
+    enum class ClusterScaleMode(val id: String, val title: String) {
+        COVER("cover", "裁剪铺满"),
+        FIT("fit", "等比居中"),
+        FILL("fill", "拉伸铺满");
+
+        companion object {
+            fun fromId(id: String?): ClusterScaleMode =
+                values().firstOrNull { it.id == id } ?: COVER
+        }
+    }
 
     private const val KEY_CLUSTER_CROP_LEFT = "cluster_crop_left"
     private const val KEY_CLUSTER_CROP_TOP = "cluster_crop_top"
@@ -33,6 +45,23 @@ object ClusterPersistence {
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    fun loadClusterScaleMode(context: Context): ClusterScaleMode {
+        val id = prefs(context).getString(KEY_CLUSTER_SCALE_MODE, ClusterScaleMode.COVER.id)
+        return ClusterScaleMode.fromId(id)
+    }
+
+    fun saveClusterScaleMode(context: Context, mode: ClusterScaleMode) {
+        prefs(context).edit().putString(KEY_CLUSTER_SCALE_MODE, mode.id).apply()
+    }
+
+    fun nextClusterScaleMode(context: Context): ClusterScaleMode {
+        val current = loadClusterScaleMode(context)
+        val all = ClusterScaleMode.values()
+        val next = all[(current.ordinal + 1) % all.size]
+        saveClusterScaleMode(context, next)
+        return next
+    }
 
     fun loadClusterMirrorMode(context: Context): Boolean =
         prefs(context).getBoolean(KEY_CLUSTER_MIRROR_MODE, true)

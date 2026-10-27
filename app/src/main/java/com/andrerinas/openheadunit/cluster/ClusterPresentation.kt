@@ -55,6 +55,14 @@ class ClusterPresentation(
 
     private var mirrorMode = true
     private var currentTheme = ClusterPersistence.loadClusterTheme(context)
+    private var scaleMode = ClusterPersistence.loadClusterScaleMode(context)
+    private var cropLeftPx = ClusterPersistence.loadClusterMirrorLeftCropPx(context)
+    private var xPct = ClusterPersistence.loadClusterCropLeftPercent(context)
+    private var yPct = ClusterPersistence.loadClusterCropTopPercent(context)
+    private var wPct = ClusterPersistence.loadClusterCropWidthPercent(context)
+    private var hPct = ClusterPersistence.loadClusterCropHeightPercent(context)
+    private var lastBmW = -1
+    private var lastBmH = -1
     private val mainHandler = Handler(Looper.getMainLooper())
     private val clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
@@ -76,13 +84,33 @@ class ClusterPresentation(
     inner class ClusterMirrorView(context: Context) : View(context) {
         var frameBitmap: Bitmap? = null
         val drawMatrix = Matrix()
+        private var clipL = 0
+        private var clipT = 0
+        private var clipR = 0
+        private var clipB = 0
+        private var isClipEnabled = false
         private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+
+        fun setClipArea(left: Int, top: Int, right: Int, bottom: Int) {
+            clipL = left
+            clipT = top
+            clipR = right
+            clipB = bottom
+            isClipEnabled = (right > left && bottom > top)
+        }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val bm = frameBitmap ?: return
             if (bm.isRecycled) return
-            canvas.drawBitmap(bm, drawMatrix, paint)
+            if (isClipEnabled) {
+                canvas.save()
+                canvas.clipRect(clipL, clipT, clipR, clipB)
+                canvas.drawBitmap(bm, drawMatrix, paint)
+                canvas.restore()
+            } else {
+                canvas.drawBitmap(bm, drawMatrix, paint)
+            }
         }
     }
 
@@ -219,7 +247,13 @@ class ClusterPresentation(
         if (!mirrorMode) return
         val mv = mirrorView ?: return
         mv.frameBitmap = bitmap
-        refreshCrop()
+        val bw = bitmap?.width ?: -1
+        val bh = bitmap?.height ?: -1
+        if (bw != lastBmW || bh != lastBmH) {
+            lastBmW = bw
+            lastBmH = bh
+            refreshCrop()
+        }
         mv.invalidate()
         if (bitmap != null && standbyLayout?.visibility == View.VISIBLE) {
             standbyLayout?.visibility = View.GONE
@@ -240,32 +274,58 @@ class ClusterPresentation(
         val bmW = bm?.width ?: baseW
         val bmH = bm?.height ?: baseH
 
-        val cropLeftPx = ClusterPersistence.loadClusterMirrorLeftCropPx(context)
-        val availW = (bmW - cropLeftPx).coerceAtLeast(1)
+        // Scaled to bmW coordinate space (cropLeftPx calibrated against baseW)
+        val scaledCropLeft = (cropLeftPx.toFloat() * bmW / baseW).coerceAtLeast(0f)
+        val availW = (bmW - scaledCropLeft).coerceAtLeast(1f)
 
-        val xPct = ClusterPersistence.loadClusterCropLeftPercent(context)
-        val yPct = ClusterPersistence.loadClusterCropTopPercent(context)
-        val wPct = ClusterPersistence.loadClusterCropWidthPercent(context)
-        val hPct = ClusterPersistence.loadClusterCropHeightPercent(context)
+        val w = (wPct * baseW / 100f).coerceAtLeast(1f)
+        val h = (hPct * baseH / 100f).coerceAtLeast(1f)
+        val x = xPct * baseW / 100f
+        val y = yPct * baseH / 100f
 
-        val w = (wPct * baseW / 100).coerceAtLeast(1)
-        val h = (hPct * baseH / 100).coerceAtLeast(1)
-        val x = xPct * baseW / 100
-        val y = yPct * baseH / 100
+        val scaleX: Float
+        val scaleY: Float
+        when (scaleMode) {
+            ClusterPersistence.ClusterScaleMode.FIT -> {
+                val s = minOf(w / availW, h / bmH.toFloat())
+                scaleX = s
+                scaleY = s
+            }
+            ClusterPersistence.ClusterScaleMode.COVER -> {
+                val s = maxOf(w / availW, h / bmH.toFloat())
+                scaleX = s
+                scaleY = s
+            }
+            ClusterPersistence.ClusterScaleMode.FILL -> {
+                scaleX = w / availW
+                scaleY = h / bmH.toFloat()
+            }
+        }
 
-        val scale = minOf(w.toFloat() / availW, h.toFloat() / bmH)
-        val drawnW = availW * scale
-        val drawnH = bmH * scale
+        val drawnW = availW * scaleX
+        val drawnH = bmH * scaleY
         val picLeft = x + (w - drawnW) / 2f
         val picTop = y + (h - drawnH) / 2f
-        val offsetX = picLeft - cropLeftPx * scale
+        val offsetX = picLeft - scaledCropLeft * scaleX
         val offsetY = picTop
 
         mv.drawMatrix.apply {
             reset()
-            setScale(scale, scale)
+            setScale(scaleX, scaleY)
             postTranslate(offsetX, offsetY)
         }
+
+        val clipLeft = if (picLeft > 0f) picLeft.toInt() else 0
+        val clipRight = if (picLeft > 0f && (picLeft + drawnW) < baseW) (picLeft + drawnW).toInt() else if (mv.width > 0) mv.width else baseW
+        val clipTop = if (picTop > 0f) picTop.toInt() else 0
+        val clipBottom = if (mv.height > 0) mv.height else baseH
+        mv.setClipArea(clipLeft, clipTop, clipRight, clipBottom)
+    }
+
+    fun applyScaleMode(mode: ClusterPersistence.ClusterScaleMode) {
+        scaleMode = mode
+        refreshCrop()
+        mirrorView?.invalidate()
     }
 
     fun updateTurnGuidance(guidance: ClusterTurnGuidance?) {
@@ -296,6 +356,12 @@ class ClusterPresentation(
     }
 
     fun notifySettingsChanged() {
+        scaleMode = ClusterPersistence.loadClusterScaleMode(context)
+        cropLeftPx = ClusterPersistence.loadClusterMirrorLeftCropPx(context)
+        xPct = ClusterPersistence.loadClusterCropLeftPercent(context)
+        yPct = ClusterPersistence.loadClusterCropTopPercent(context)
+        wPct = ClusterPersistence.loadClusterCropWidthPercent(context)
+        hPct = ClusterPersistence.loadClusterCropHeightPercent(context)
         applyTheme(ClusterPersistence.loadClusterTheme(context))
         turnCardView?.notifyPositionChanged()
         etaCardView?.notifyPositionChanged()

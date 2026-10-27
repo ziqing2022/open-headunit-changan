@@ -175,6 +175,12 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 Toast.makeText(this@AapProjectionActivity, "仪表主题：${nextTheme.displayName}", Toast.LENGTH_SHORT).show()
                 nextTheme
             }
+            onCycleScaleMode = {
+                val nextMode = ClusterPersistence.nextClusterScaleMode(this@AapProjectionActivity)
+                clusterPresentation?.applyScaleMode(nextMode)
+                Toast.makeText(this@AapProjectionActivity, "仪表比例：${nextMode.title}", Toast.LENGTH_SHORT).show()
+                nextMode
+            }
             onTestVoice = {
                 if (textToSpeech != null) {
                     textToSpeech?.speak("长安汽车与 Android Auto 无边界融合桌面已连接，语音播报正常", TextToSpeech.QUEUE_FLUSH, null, "TEST_TTS")
@@ -229,8 +235,13 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
             }
             try {
                 val view = projectionView
+                val vw = if (view != null && view.width > 0) view.width else 1920
+                val vh = if (view != null && view.height > 0) view.height else 720
+                val targetW = 960.coerceAtMost(vw)
+                val targetH = (targetW * vh / vw.coerceAtLeast(1)).coerceAtLeast(1)
+
                 if (view is TextureProjectionView && view.isAvailable) {
-                    val bm = view.getBitmap(960, 540)
+                    val bm = view.getBitmap(targetW, targetH)
                     if (bm != null) {
                         clusterPresentation?.updateMirrorFrame(bm)
                     }
@@ -243,10 +254,6 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isPixelCopyInProgress) {
                         val surface = view.holder.surface
                         if (surface != null && surface.isValid) {
-                            val w = if (view.width > 0) view.width else 960
-                            val h = if (view.height > 0) view.height else 540
-                            val targetW = 960.coerceAtMost(w)
-                            val targetH = (targetW * h / w).coerceAtLeast(1)
                             val bm = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
                             isPixelCopyInProgress = true
                             PixelCopy.request(view, bm, { result ->
