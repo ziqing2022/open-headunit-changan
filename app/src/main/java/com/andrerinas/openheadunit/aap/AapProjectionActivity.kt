@@ -235,8 +235,9 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
             }
             try {
                 val view = projectionView
-                val vw = if (view != null && view.width > 0) view.width else 1920
-                val vh = if (view != null && view.height > 0) view.height else 720
+                val androidView = view as? View
+                val vw = if (androidView != null && androidView.width > 0) androidView.width else 1920
+                val vh = if (androidView != null && androidView.height > 0) androidView.height else 720
                 val targetW = 960.coerceAtMost(vw)
                 val targetH = (targetW * vh / vw.coerceAtLeast(1)).coerceAtLeast(1)
 
@@ -250,13 +251,13 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                     if (bm != null) {
                         clusterPresentation?.updateMirrorFrame(bm)
                     }
-                } else if (view is SurfaceView) {
+                } else if (androidView is SurfaceView) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isPixelCopyInProgress) {
-                        val surface = view.holder.surface
+                        val surface = androidView.holder.surface
                         if (surface != null && surface.isValid) {
                             val bm = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
                             isPixelCopyInProgress = true
-                            PixelCopy.request(view, bm, { result ->
+                            PixelCopy.request(androidView, bm, { result ->
                                 isPixelCopyInProgress = false
                                 if (result == PixelCopy.SUCCESS) {
                                     runOnUiThread { clusterPresentation?.updateMirrorFrame(bm) }
