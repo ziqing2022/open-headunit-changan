@@ -108,7 +108,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
 
     // Instrument Cluster (Secondary Display) & 3-Finger Gesture state
     private var clusterPresentation: ClusterPresentation? = null
-    private var clusterSwipePosition = 0 // -1 = native car screen, 0 = mirror, 1 = nav cards
+    private var clusterSwipePosition = -1 // -1 = native car screen, 0 = mirror, 1 = nav cards
     private var isClusterNavReceiverRegistered = false
     private var isClusterToggleReceiverRegistered = false
     private var isClusterDisplayListenerRegistered = false
@@ -141,12 +141,33 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
     }
 
     fun toggleClusterMode() {
-        val nextPos = if (clusterSwipePosition == 0) 1 else 0
+        val nextPos = when (clusterSwipePosition) {
+            -1 -> 0
+            0 -> 1
+            else -> -1
+        }
         clusterSwipePosition = nextPos
         ClusterPersistence.saveClusterMirrorMode(this, clusterSwipePosition == 0)
+        if (clusterSwipePosition >= 0) {
+            if (InCallClusterBridge.isAvailable(this)) {
+                InCallClusterBridge.openProjection(this, forceFull = true)
+            }
+            ensureClusterPresentation(forceRecreate = true)
+        } else {
+            if (InCallClusterBridge.isAvailable(this)) {
+                InCallClusterBridge.releaseExternalScreen(this)
+            }
+            clusterPresentation?.setMapVisible(false)
+            clusterPresentation?.dismiss()
+            clusterPresentation = null
+        }
         applyClusterSwipeState()
         smartDockView?.updateStateLabels()
-        val modeStr = if (nextPos == 0) "整机镜像" else "极简导航卡片"
+        val modeStr = when (nextPos) {
+            0 -> "整机镜像"
+            1 -> "极简导航卡片"
+            else -> "原车仪表"
+        }
         Toast.makeText(this, "仪表盘模式：$modeStr", Toast.LENGTH_SHORT).show()
     }
 
@@ -165,6 +186,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
     private fun attachSmartDockView() {
         val container = findViewById<FrameLayout>(R.id.container) ?: return
         val dock = com.andrerinas.openheadunit.view.SmartOverlayDockView(this).apply {
+            clusterPositionGetter = { clusterSwipePosition }
             onToggleClusterMode = {
                 toggleClusterMode()
                 updateStateLabels()
@@ -238,7 +260,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 val androidView = view as? View
                 val vw = if (androidView != null && androidView.width > 0) androidView.width else 1920
                 val vh = if (androidView != null && androidView.height > 0) androidView.height else 720
-                val targetW = 960.coerceAtMost(vw)
+                val targetW = 1280.coerceAtMost(vw)
                 val targetH = (targetW * vh / vw.coerceAtLeast(1)).coerceAtLeast(1)
 
                 if (view is TextureProjectionView && view.isAvailable) {
@@ -1324,7 +1346,8 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         dm?.registerDisplayListener(clusterDisplayListener, watchdogHandler)
         isClusterDisplayListenerRegistered = true
 
-        clusterSwipePosition = if (ClusterPersistence.loadClusterMirrorMode(this)) 0 else 1
+        // Initial state is OEM car screen (-1). Projection is only activated when driver manually uses 3-finger swipe or dock.
+        clusterSwipePosition = -1
 
         if (InCallClusterBridge.isAvailable(this)) {
             AppLog.i("InCallClusterBridge: Changan cluster projection service detected")
@@ -1674,7 +1697,9 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         userLeftDeliberately = false
         closeCallRaiseEpisode("the projection is back in front")
         AppLog.i("AapProjectionActivity: onResume")
-        ensureClusterPresentation()
+        if (clusterSwipePosition >= 0) {
+            ensureClusterPresentation()
+        }
         // Show the one-time rename notice even here, on top of an active projection.
         RenameNotice.maybeShow(this, App.provide(this).settings)
         Aa174Notice.maybeShow(this, App.provide(this).settings)
@@ -2554,6 +2579,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 }, 1200L)
             }
             applyClusterSwipeState()
+            smartDockView?.updateStateLabels()
             val text = when (clusterSwipePosition) {
                 0 -> "仪表盘：整机镜像"
                 1 -> "仪表盘：仅导航"
@@ -2573,6 +2599,8 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                     InCallClusterBridge.releaseExternalScreen(this)
                 }
                 clusterPresentation?.setMapVisible(false)
+                clusterPresentation?.dismiss()
+                clusterPresentation = null
             } else {
                 if (InCallClusterBridge.isAvailable(this)) {
                     InCallClusterBridge.openProjection(this, forceFull = true)
@@ -2580,6 +2608,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 ensureClusterPresentation(forceRecreate = true)
             }
             applyClusterSwipeState()
+            smartDockView?.updateStateLabels()
             val text = when (clusterSwipePosition) {
                 0 -> "仪表盘：整机镜像"
                 1 -> "仪表盘：仅导航"

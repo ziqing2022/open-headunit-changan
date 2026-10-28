@@ -99,6 +99,14 @@ class ClusterPresentation(
             isClipEnabled = (right > left && bottom > top)
         }
 
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+            super.onSizeChanged(w, h, oldw, oldh)
+            if (w > 0 && h > 0) {
+                refreshCrop()
+                invalidate()
+            }
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val bm = frameBitmap ?: return
@@ -117,7 +125,7 @@ class ClusterPresentation(
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window?.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+        window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         window?.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window?.addFlags(
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -131,7 +139,7 @@ class ClusterPresentation(
         )
 
         val root = FrameLayout(context).apply {
-            setBackgroundColor(Color.rgb(15, 22, 30))
+            setBackgroundColor(Color.TRANSPARENT)
         }
         rootView = root
 
@@ -144,7 +152,13 @@ class ClusterPresentation(
         val standby = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.TRANSPARENT)
+            val bg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.argb(175, 15, 22, 30))
+                cornerRadius = 28f
+                setStroke(2, Color.argb(80, 255, 255, 255))
+            }
+            background = bg
+            setPadding(48, 24, 48, 24)
         }
         standbyLayout = standby
 
@@ -262,8 +276,10 @@ class ClusterPresentation(
 
     fun refreshCrop() {
         val mv = mirrorView ?: return
-        val baseW = if (projectionSize.x > 0) projectionSize.x else 1920
-        val baseH = if (projectionSize.y > 0) projectionSize.y else 720
+        val decorW = window?.decorView?.width ?: 0
+        val decorH = window?.decorView?.height ?: 0
+        val baseW = if (decorW > 0) decorW else if (mv.width > 0) mv.width else if (projectionSize.x > 0) projectionSize.x else 1920
+        val baseH = if (decorH > 0) decorH else if (mv.height > 0) mv.height else if (projectionSize.y > 0) projectionSize.y else 720
 
         if (!mirrorMode) {
             mv.drawMatrix.reset()
@@ -316,9 +332,9 @@ class ClusterPresentation(
         }
 
         val clipLeft = if (picLeft > 0f) picLeft.toInt() else 0
-        val clipRight = if (picLeft > 0f && (picLeft + drawnW) < baseW) (picLeft + drawnW).toInt() else if (mv.width > 0) mv.width else baseW
+        val clipRight = if (picLeft > 0f && (picLeft + drawnW) < baseW) (picLeft + drawnW).toInt() else baseW
         val clipTop = if (picTop > 0f) picTop.toInt() else 0
-        val clipBottom = if (mv.height > 0) mv.height else baseH
+        val clipBottom = baseH
         mv.setClipArea(clipLeft, clipTop, clipRight, clipBottom)
     }
 
@@ -343,11 +359,7 @@ class ClusterPresentation(
 
     fun applyTheme(theme: ClusterTheme) {
         currentTheme = theme
-        val gd = android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(theme.backgroundStart, theme.backgroundEnd)
-        )
-        rootView?.background = gd
+        rootView?.setBackgroundColor(Color.TRANSPARENT)
         titleTextView?.setTextColor(theme.primaryAccent)
         speedTextView?.setTextColor(theme.speedColor)
         turnCardView?.setTheme(theme)

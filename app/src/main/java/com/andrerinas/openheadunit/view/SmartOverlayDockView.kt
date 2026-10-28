@@ -38,6 +38,7 @@ class SmartOverlayDockView @JvmOverloads constructor(
     var onCycleTheme: (() -> ClusterTheme)? = null
     var onTestVoice: (() -> Unit)? = null
     var onReturnCarHome: (() -> Unit)? = null
+    var clusterPositionGetter: (() -> Int)? = null
 
     private var isExpanded = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -206,14 +207,14 @@ class SmartOverlayDockView @JvmOverloads constructor(
         }
 
         // Chip 1: Cluster Mode
-        val (modeChip, modeSub) = createChip("仪表投屏", "整机镜像") {
+        val (modeChip, modeSub) = createChip("仪表投屏", "原车") {
             onToggleClusterMode?.invoke()
             updateStateLabels()
         }
         modeChipTv = modeSub
 
         // Chip 2: Cluster Scale Mode
-        val (scaleChip, scaleSub) = createChip("画面比例", "裁剪铺满") {
+        val (scaleChip, scaleSub) = createChip("画面比例", "拉伸铺满") {
             val next = onCycleScaleMode?.invoke()
             if (next != null) {
                 scaleChipTv.text = next.title
@@ -276,7 +277,12 @@ class SmartOverlayDockView @JvmOverloads constructor(
         val isMirror = ClusterPersistence.loadClusterMirrorMode(context)
         val currentTheme = ClusterPersistence.loadClusterTheme(context)
         val currentScaleMode = ClusterPersistence.loadClusterScaleMode(context)
-        val modeStr = if (isMirror) "整机镜像" else "极简卡片"
+        val pos = clusterPositionGetter?.invoke() ?: (if (isMirror) 0 else 1)
+        val modeStr = when (pos) {
+            0 -> "整机镜像"
+            1 -> "极简卡片"
+            else -> "原车仪表"
+        }
 
         modeChipTv.text = modeStr
         scaleChipTv.text = currentScaleMode.title

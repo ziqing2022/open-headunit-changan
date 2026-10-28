@@ -28,13 +28,13 @@ object ClusterPersistence {
     private const val KEY_CLUSTER_SCALE_MODE = "cluster_scale_mode"
 
     enum class ClusterScaleMode(val id: String, val title: String) {
+        FILL("fill", "拉伸铺满"),
         COVER("cover", "裁剪铺满"),
-        FIT("fit", "等比居中"),
-        FILL("fill", "拉伸铺满");
+        FIT("fit", "等比居中");
 
         companion object {
             fun fromId(id: String?): ClusterScaleMode =
-                values().firstOrNull { it.id == id } ?: COVER
+                values().firstOrNull { it.id == id } ?: FILL
         }
     }
 
@@ -47,7 +47,7 @@ object ClusterPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun loadClusterScaleMode(context: Context): ClusterScaleMode {
-        val id = prefs(context).getString(KEY_CLUSTER_SCALE_MODE, ClusterScaleMode.COVER.id)
+        val id = prefs(context).getString(KEY_CLUSTER_SCALE_MODE, ClusterScaleMode.FILL.id)
         return ClusterScaleMode.fromId(id)
     }
 
